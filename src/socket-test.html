@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Socket.io Test</title>
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 900px; margin: 30px auto; padding: 20px; background: #f5f5f5; }
+    .container { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    input { width: 95%; padding: 10px; margin: 8px 0; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; }
+    button { padding: 10px 20px; margin: 5px; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; }
+    .btn-green { background: #4CAF50; color: white; }
+    .btn-blue { background: #2196F3; color: white; }
+    .btn-red { background: #f44336; color: white; }
+    .btn-gray { background: #757575; color: white; }
+    .log { background: #1e1e1e; color: #d4d4d4; padding: 15px; margin: 10px 0; border-radius: 5px; font-family: monospace; font-size: 13px; max-height: 500px; overflow-y: auto; }
+    .log .success { color: #4EC9B0; }
+    .log .error { color: #F44747; }
+    .log .info { color: #9CDCFE; }
+    .log .warning { color: #CE9178; }
+    .status { display: inline-block; padding: 6px 16px; border-radius: 20px; font-size: 14px; font-weight: bold; }
+    .connected { background: #4CAF50; color: white; }
+    .disconnected { background: #f44336; color: white; }
+    h2 { color: #333; border-bottom: 2px solid #eee; padding-bottom: 8px; margin-top: 25px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .section { background: #f9f9f9; padding: 15px; border-radius: 8px; border: 1px solid #eee; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>🔌 Socket.io Test Panel</h1>
+  <p>Status: <span id="status" class="status disconnected">Disconnected</span></p>
+  <p id="socketInfo" style="color: #666; font-size: 13px;"></p>
+
+  <h2>1. Connect</h2>
+  <input type="text" id="token" placeholder="JWT Token paste করুন">
+  <button class="btn-green" onclick="connect()">🔌 Connect</button>
+  <button class="btn-red" onclick="disconnect()">❌ Disconnect</button>
+
+  <div class="grid" style="margin-top: 20px;">
+
+    <div class="section">
+      <h2>2. Typing Indicator</h2>
+      <input type="text" id="typingReceiver" placeholder="Receiver User ID">
+      <button class="btn-blue" onclick="startTyping()">⌨️ Start Typing</button>
+      <button class="btn-gray" onclick="stopTyping()">⏹ Stop Typing</button>
+    </div>
+
+    <div class="section">
+      <h2>3. Manual Message Event</h2>
+      <input type="text" id="manualReceiver" placeholder="Receiver User ID">
+      <input type="text" id="manualMessageId" placeholder="Message ID">
+      <button class="btn-blue" onclick="sendMessageEvent()">📤 Emit sendMessage</button>
+    </div>
+
+  </div>
+
+  <h2>📋 Real-time Event Log</h2>
+  <div id="log" class="log"><span class="info">Waiting for events...</span></div>
+  <button class="btn-gray" onclick="clearLog()">🗑 Clear Log</button>
+
+</div>
+
+<script>
+  let socket = null;
+
+  // All events to listen for
+  const EVENTS = [
+    'newMessage',
+    'messageSent',
+    'messageEdited',          // ← edit notification
+    'messageDeleted',         // ← delete notification
+    'messageReadConfirm',
+    'userTyping',
+    'userStoppedTyping',
+    'userOnline',
+    'userOffline',
+    'onlineUsers',
+    'error',
+  ];
+
+  const EVENT_ICONS = {
+    newMessage: '📨',
+    messageSent: '✅',
+    messageEdited: '✏️',
+    messageDeleted: '🗑️',
+    messageReadConfirm: '👁️',
+    userTyping: '⌨️',
+    userStoppedTyping: '⏹',
+    userOnline: '🟢',
+    userOffline: '🔴',
+    onlineUsers: '👥',
+    error: '❌',
+  };
+
+  function log(message, type = 'info') {
+    const logDiv = document.getElementById('log');
+    const time = new Date().toLocaleTimeString();
+    logDiv.innerHTML += `<div class="${type}">[${time}] ${message}</div>`;
+    logDiv.scrollTop = logDiv.scrollHeight;
+  }
+
+  function clearLog() {
+    document.getElementById('log').innerHTML = '<span class="info">Log cleared...</span>';
+  }
+
+  function updateStatus(connected, socketId = '') {
+    const el = document.getElementById('status');
+    const infoEl = document.getElementById('socketInfo');
+    
+    if (connected) {
+      el.textContent = 'Connected';
+      el.className = 'status connected';
+      infoEl.textContent = `Socket ID: ${socketId}`;
+    } else {
+      el.textContent = 'Disconnected';
+      el.className = 'status disconnected';
+      infoEl.textContent = '';
+    }
+  }
+
+  function connect() {
+    const token = document.getElementById('token').value.trim();
+
+    if (!token) {
+      log('❌ Token দিন!', 'error');
+      return;
+    }
+
+    // Disconnect existing
+    if (socket) {
+      socket.disconnect();
+    }
+
+    log('🔄 Connecting to http://localhost:5000 ...', 'info');
+
+    socket = io('http://localhost:5000', {
+      auth: { token },
+      transports: ['websocket', 'polling'],
+      reconnection: false,
+    });
+
+    // Connection events
+    socket.on('connect', () => {
+      log(`✅ Connected! Socket ID: ${socket.id}`, 'success');
+      updateStatus(true, socket.id);
+
+      // ✅ Register ALL events after connection
+      registerAllEvents();
+    });
+
+    socket.on('disconnect', (reason) => {
+      log(`❌ Disconnected: ${reason}`, 'error');
+      updateStatus(false);
+    });
+
+    socket.on('connect_error', (error) => {
+      log(`❌ Connection Error: ${error.message}`, 'error');
+      updateStatus(false);
+    });
+  }
+
+  function registerAllEvents() {
+    // ✅ Register all events dynamically
+    EVENTS.forEach((eventName) => {
+      // Remove existing listener first
+      socket.off(eventName);
+
+      // Add new listener
+      socket.on(eventName, (data) => {
+        const icon = EVENT_ICONS[eventName] || '📌';
+        
+        // Special formatting for different events
+        if (eventName === 'userTyping') {
+          log(`${icon} ${data.name} is typing...`, 'warning');
+        } else if (eventName === 'userStoppedTyping') {
+          log(`${icon} User stopped typing`, 'warning');
+        } else if (eventName === 'userOnline') {
+          log(`${icon} Online: ${data.name}`, 'success');
+        } else if (eventName === 'userOffline') {
+          log(`${icon} Offline: ${data.userId}`, 'error');
+        } else if (eventName === 'onlineUsers') {
+          log(`${icon} Online users: ${data.length}`, 'info');
+        } else {
+          // ✅ For all message events, show full data
+          log(
+            `${icon} <strong>${eventName.toUpperCase()}</strong>: <pre style="margin:5px 0; white-space:pre-wrap;">${JSON.stringify(data, null, 2)}</pre>`,
+            eventName.includes('error') ? 'error' : 'success'
+          );
+        }
+      });
+
+      console.log(`✅ Registered event: ${eventName}`);
+    });
+
+    log('✅ All event listeners registered!', 'success');
+    log(`📋 Listening for: ${EVENTS.join(', ')}`, 'info');
+  }
+
+  function disconnect() {
+    if (socket) {
+      socket.disconnect();
+      socket = null;
+      log('👋 Manually disconnected', 'warning');
+      updateStatus(false);
+    }
+  }
+
+  function startTyping() {
+    if (!socket?.connected) { log('❌ Connect first!', 'error'); return; }
+    const receiverId = document.getElementById('typingReceiver').value.trim();
+    if (!receiverId) { log('❌ Receiver ID দিন', 'error'); return; }
+    socket.emit('typing', { receiverId });
+    log(`⌨️ Typing event sent to: ${receiverId}`, 'info');
+  }
+
+  function stopTyping() {
+    if (!socket?.connected) { log('❌ Connect first!', 'error'); return; }
+    const receiverId = document.getElementById('typingReceiver').value.trim();
+    if (!receiverId) { log('❌ Receiver ID দিন', 'error'); return; }
+    socket.emit('stopTyping', { receiverId });
+    log(`⏹ Stop typing sent to: ${receiverId}`, 'info');
+  }
+
+  function sendMessageEvent() {
+    if (!socket?.connected) { log('❌ Connect first!', 'error'); return; }
+    const receiverId = document.getElementById('manualReceiver').value.trim();
+    const messageId = document.getElementById('manualMessageId').value.trim();
+    if (!receiverId || !messageId) { log('❌ সব field পূরণ করুন', 'error'); return; }
+    socket.emit('sendMessage', { receiverId, messageId });
+    log(`📤 sendMessage event emitted`, 'info');
+  }
+</script>
+</body>
+</html>
