@@ -95,7 +95,7 @@ const recurringDonationSchema = new mongoose.Schema(
 // ─── Indexes ──────────────────────────────────────────────────────────────────
 recurringDonationSchema.index({ donor: 1, status: 1 });
 recurringDonationSchema.index({ nextDueDate: 1, status: 1 });
-recurringDonationSchema.index({ status: 1 });
+
 
 // ─── Virtual: Total Paid ──────────────────────────────────────────────────────
 recurringDonationSchema.virtual("totalPaid").get(function () {

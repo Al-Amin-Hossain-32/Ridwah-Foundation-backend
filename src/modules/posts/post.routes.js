@@ -7,7 +7,8 @@ const router = express.Router();
 /**
  * All routes require authentication
  */
-
+// Global Feed (সবার পোস্ট)
+router.get('/feed', protect, postController.getGlobalFeed.bind(postController));
 // Timeline (must be before /:id)
 router.get('/timeline', protect, postController.getTimeline.bind(postController));
 

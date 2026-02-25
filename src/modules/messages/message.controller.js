@@ -1,10 +1,6 @@
 import messageService from './message.service.js';
 import { getIO } from '../../config/socket.js';
 
-/**
- * Message Controller
- */
-
 class MessageController {
   /**
    * @desc    Send message
@@ -24,23 +20,30 @@ class MessageController {
       // Emit real-time event via Socket.io
       try {
         const io = getIO();
-        
-        // Emit to receiver
-        io.to(receiverId).emit('newMessage', {
+
+        const messagePayload = {
+          _id: result.message._id,
           messageId: result.message._id,
           senderId: req.user._id,
           senderName: req.user.name,
           senderPicture: req.user.profilePicture,
           content: result.message.content,
+          conversation: result.conversation._id,
           conversationId: result.conversation._id,
           timestamp: result.message.createdAt,
-        });
+          createdAt: result.message.createdAt,
+          isRead: false,
+          sender: {
+            _id: req.user._id,
+            name: req.user.name,
+            profilePicture: req.user.profilePicture,
+          },
+        };
 
+        io.to(receiverId.toString()).emit('newMessage', messagePayload);
         console.log('📡 Real-time event sent to:', receiverId);
       } catch (socketError) {
-        // Socket.io error (user might be offline)
         console.log('⚠️  Socket.io error (user might be offline):', socketError.message);
-        // Don't fail the request, message is saved in DB
       }
 
       res.status(201).json({
@@ -55,7 +58,7 @@ class MessageController {
 
   /**
    * @desc    Get all conversations
-   * @route   GET /api/conversations
+   * @route   GET /api/messages/conversations
    * @access  Private
    */
   async getConversations(req, res, next) {
@@ -99,7 +102,7 @@ class MessageController {
   }
 
   /**
-   * @desc    Mark message as read
+   * @desc    Mark single message as read
    * @route   PUT /api/messages/:id/read
    * @access  Private
    */
@@ -110,10 +113,8 @@ class MessageController {
         req.user._id
       );
 
-      // Emit real-time event to sender
       try {
         const io = getIO();
-        
         io.to(message.sender.toString()).emit('messageReadConfirm', {
           messageId: message._id,
           readBy: req.user._id,
@@ -134,8 +135,8 @@ class MessageController {
   }
 
   /**
-   * @desc    Mark conversation as read
-   * @route   PUT /api/conversations/:id/read
+   * @desc    Mark entire conversation as read
+   * @route   PUT /api/messages/conversations/:id/read
    * @access  Private
    */
   async markConversationAsRead(req, res, next) {
@@ -173,146 +174,120 @@ class MessageController {
     }
   }
 
-/**
- * @desc    Edit message
- * @route   PUT /api/messages/:id
- * @access  Private
- */
-async editMessage(req, res, next) {
-  try {
-    const { content } = req.body;
-
-    const message = await messageService.editMessage(
-      req.params.id,
-      req.user._id,
-      content
-    );
-
-    // ✅ Use message.receiver directly (ObjectId)
-    const receiverId = message.receiver.toString();
-    const senderId = message.sender._id.toString();
-
-    console.log('📡 Emitting edit notification to receiver:', receiverId);
-
+  /**
+   * @desc    Edit message
+   * @route   PUT /api/messages/:id
+   * @access  Private
+   */
+  async editMessage(req, res, next) {
     try {
-      const io = getIO();
+      const { content } = req.body;
 
-        // ✅ Debug: Check who is in the room
-  const receiverRoom = io.sockets.adapter.rooms.get(receiverId);
-  const senderRoom = io.sockets.adapter.rooms.get(senderId);
+      const message = await messageService.editMessage(
+        req.params.id,
+        req.user._id,
+        content
+      );
 
-  console.log('🔍 Room Debug:');
-  console.log('   Receiver ID:', receiverId);
-  console.log('   Receiver room size:', receiverRoom ? receiverRoom.size : 0);
-  console.log('   Sender ID:', senderId);
-  console.log('   Sender room size:', senderRoom ? senderRoom.size : 0);
-  console.log('   All rooms:', Array.from(io.sockets.adapter.rooms.keys()));
+      const receiverId = message.receiver.toString();
+      const senderId = message.sender._id.toString();
 
-  // Emit to receiver
-  io.to(receiverId).emit('messageEdited', {
-    messageId: message._id,
-    conversationId: message.conversation,
-    newContent: message.content,
-    isEdited: true,
-    editedAt: message.lastEditedAt,
-  });
-
-  console.log('✅ Edit event emitted to room:', receiverId);
-
-      // ✅ Emit to sender's other devices
-      io.to(senderId).emit('messageEdited', {
+      const editPayload = {
         messageId: message._id,
         conversationId: message.conversation,
         newContent: message.content,
         isEdited: true,
         editedAt: message.lastEditedAt,
-      });
+      };
 
-      console.log('✅ Edit notification sent');
-    } catch (socketError) {
-      console.log('⚠️  Socket error:', socketError.message);
-    }
-
-    res.status(200).json({
-      success: true,
-      message: 'Message edited successfully',
-      data: message,
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-async deleteMessage(req, res, next) {
-  try {
-    const { deleteType = 'for_everyone' } = req.body;
-
-    const result = await messageService.deleteMessage(
-      req.params.id,
-      req.user._id,
-      deleteType
-    );
-
-    // ✅ Use returned IDs directly
-    const { receiverId, senderId } = result;
-
-    console.log('📡 Emitting delete notification to receiver:', receiverId);
-
-    try {
-      const io = getIO();
-
-      if (deleteType === 'for_everyone') {
-        // ✅ Notify receiver
-        io.to(receiverId).emit('messageDeleted', {
-          messageId: result.message._id,
-          conversationId: result.message.conversation,
-          deleteType: 'for_everyone',
-        });
+      try {
+        const io = getIO();
+        // Notify receiver
+        io.to(receiverId).emit('messageEdited', editPayload);
+        // Notify sender's other tabs/devices
+        io.to(senderId).emit('messageEdited', editPayload);
+        console.log('✅ Edit event emitted to:', receiverId, senderId);
+      } catch (socketError) {
+        console.log('⚠️  Socket error:', socketError.message);
       }
 
-      // ✅ Notify sender's other devices
-      io.to(senderId).emit('messageDeleted', {
+      res.status(200).json({
+        success: true,
+        message: 'Message edited successfully',
+        data: message,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * @desc    Delete message (soft delete)
+   * @route   DELETE /api/messages/:id
+   * @access  Private
+   */
+  async deleteMessage(req, res, next) {
+    try {
+      const { deleteType = 'for_everyone' } = req.body;
+
+      const result = await messageService.deleteMessage(
+        req.params.id,
+        req.user._id,
+        deleteType
+      );
+
+      const { receiverId, senderId } = result;
+
+      const deletePayload = {
         messageId: result.message._id,
         conversationId: result.message.conversation,
         deleteType,
+      };
+
+      try {
+        const io = getIO();
+
+        if (deleteType === 'for_everyone') {
+          io.to(receiverId).emit('messageDeleted', deletePayload);
+        }
+        // Always notify sender's other devices
+        io.to(senderId).emit('messageDeleted', deletePayload);
+        console.log('✅ Delete notification sent');
+      } catch (socketError) {
+        console.log('⚠️  Socket error:', socketError.message);
+      }
+
+      res.status(200).json({
+        success: true,
+        message: `Message deleted (${deleteType})`,
+        data: result,
       });
-
-      console.log('✅ Delete notification sent');
-    } catch (socketError) {
-      console.log('⚠️  Socket error:', socketError.message);
+    } catch (error) {
+      next(error);
     }
-
-    res.status(200).json({
-      success: true,
-      message: `Message deleted (${deleteType})`,
-      data: result,
-    });
-  } catch (error) {
-    next(error);
   }
-}
 
-/**
- * @desc    Get edit history (Admin only)
- * @route   GET /api/messages/:id/history
- * @access  Private (Admin)
- */
-async getEditHistory(req, res, next) {
-  try {
-    const history = await messageService.getEditHistory(
-      req.params.id,
-      req.user._id,
-      req.user.role
-    );
+  /**
+   * @desc    Get edit history
+   * @route   GET /api/messages/:id/history
+   * @access  Private (Admin only)
+   */
+  async getEditHistory(req, res, next) {
+    try {
+      const history = await messageService.getEditHistory(
+        req.params.id,
+        req.user._id,
+        req.user.role
+      );
 
-    res.status(200).json({
-      success: true,
-      ...history,
-    });
-  } catch (error) {
-    next(error);
+      res.status(200).json({
+        success: true,
+        ...history,
+      });
+    } catch (error) {
+      next(error);
+    }
   }
-}
 }
 
 export default new MessageController();

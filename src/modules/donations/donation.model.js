@@ -70,7 +70,7 @@ const donationSchema = new mongoose.Schema(
         message: "Invalid status",
       },
       default: "pending",
-      index: true,
+      
     },
 
     // ── Approval Tracking ──────────────────────────────────────────────────────
@@ -129,7 +129,7 @@ donationSchema.index({ donor: 1, createdAt: -1 });
 donationSchema.index({ campaign: 1, status: 1 });
 donationSchema.index({ status: 1, createdAt: -1 });
 donationSchema.index({ donationType: 1 });
-donationSchema.index({ transactionId: 1 });
+
 
 // ─── Pre-save: Generate Transaction ID ────────────────────────────────────────
 donationSchema.pre("save", async function () {

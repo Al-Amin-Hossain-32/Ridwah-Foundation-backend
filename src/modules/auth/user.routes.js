@@ -21,6 +21,13 @@ router.post(
   upload.single('image'), // 'image' = field name in form-data
   authController.uploadProfilePicture.bind(authController)
 );
+// Cover Photo upload
+router.post(
+  '/upload-picture/cover',
+  protect,
+  upload.single('coverPhoto'), // 'image' = field name in form-data
+  authController.uploadCoverPhoto.bind(authController)
+);
 
 // Get user profile
 router.get('/:id', protect, authController.getUserProfile.bind(authController));

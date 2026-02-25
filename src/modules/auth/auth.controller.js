@@ -177,6 +177,45 @@ async uploadProfilePicture(req, res, next) {
     next(error);
   }
 }
+/**
+ * @desc    Upload cover Photo
+ * @route   POST /api/users/upload-picture/cover
+ * @access  Private
+ */
+async uploadCoverPhoto(req, res, next) {
+  try {
+    // Check if file exists
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please upload an image',
+      });
+    }
+
+    console.log('📁 File received:', req.file.originalname);
+    console.log('📊 File size:', req.file.size);
+
+    // Upload to Cloudinary
+    console.log('☁️  Uploading to Cloudinary...');
+    const imageUrl = await uploadToCloudinary(req.file.buffer);
+    console.log('✅ Upload successful:', imageUrl);
+
+    // Update user profile
+    const user = await authService.updateCoverPhoto(
+      req.user._id,
+      imageUrl
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'Cover Photo updated successfully',
+      data: user,
+    });
+  } catch (error) {
+    console.error('❌ Upload error:', error);
+    next(error);
+  }
+}
 
 /**
  * @desc    Search users

@@ -143,6 +143,7 @@ class PostService {
     const posts = await Post.find({ author: userId })
       .populate('author', 'name profilePicture')
       .populate('comments.user', 'name profilePicture')
+      .populate("likes", "name profilePicture")
       .sort({ createdAt: -1 })
       .limit(limit)
       .skip((page - 1) * limit);
@@ -159,7 +160,33 @@ class PostService {
       },
     };
   }
+/**
+   * Get Global Feed (All users' posts)
+   * * @param {number} page
+   * @param {number} limit
+   * @returns {Promise<Object>}
+   */
+  async getGlobalFeed(page = 1, limit = 20) {
+    const posts = await Post.find()
+      .populate('author', 'name profilePicture role')
+      .populate('comments.user', 'name profilePicture')
+      .populate('likes', 'name profilePicture') // লাইকারদের ডাটা পপুলেট করা হলো
+      .sort({ createdAt: -1 }) // একদম নতুন পোস্ট সবার আগে
+      .limit(limit)
+      .skip((page - 1) * limit);
 
+    const total = await Post.countDocuments();
+
+    return {
+      posts,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    };
+  }
   /**
    * Update post
    * 
@@ -276,10 +303,10 @@ class PostService {
     await post.populate('author', 'name profilePicture');
 
     return {
-      post,
-      action: alreadyLiked ? 'unliked' : 'liked',
-      likeCount: post.likes.length,
-    };
+  likes: post.likes,
+  likeCount: post.likes.length,
+  action: alreadyLiked ? "unliked" : "liked",
+};
   }
 
   /**

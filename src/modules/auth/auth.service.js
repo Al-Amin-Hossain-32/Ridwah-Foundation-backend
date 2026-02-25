@@ -218,11 +218,39 @@ async updateProfile(userId, updateData) {
  * @param {string} imageUrl - Cloudinary URL
  * @returns {Promise<Object>} - Updated user
  */
+/**
+ * Update profile picture
+ */
 async updateProfilePicture(userId, imageUrl) {
   const user = await User.findByIdAndUpdate(
     userId,
     { profilePicture: imageUrl },
-    { new: true }
+    { 
+      returnDocument: 'after', // ✅ 'new: true' এর বদলে এটি ব্যবহার করুন
+      runValidators: true 
+    }
+  );
+
+  if (!user) {
+    const error = new Error('User not found');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return user.getPublicProfile();
+}
+
+/**
+ * Update cover Photo
+ */
+async updateCoverPhoto(userId, imageUrl) {
+  const user = await User.findByIdAndUpdate(
+    userId,
+    { coverPhoto: imageUrl },
+    { 
+      returnDocument: 'after', // ✅ এখানেও একই পরিবর্তন
+      runValidators: true 
+    }
   );
 
   if (!user) {

@@ -145,6 +145,7 @@ export const getUserDonations = async (userId, query) => {
   const [donations, total] = await Promise.all([
     Donation.find(filter)
       .populate("campaign", "title coverImage")
+      .populate("donor", "name profilePicture")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit))

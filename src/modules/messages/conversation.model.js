@@ -58,8 +58,8 @@ conversationSchema.pre('save', function () {
  * Static Method: Find or create conversation
  */
 conversationSchema.statics.findOrCreate = async function (userId1, userId2) {
-  const sortedParticipants = [userId1.toString(), userId2.toString()].sort();
-
+  const sortedParticipants = [userId1?.toString(), userId2?.toString()].sort();
+console.log("Debug IDs:", { userId1, userId2 });
   console.log('🔍 Looking for conversation between:', sortedParticipants);
 
   // Try to find existing

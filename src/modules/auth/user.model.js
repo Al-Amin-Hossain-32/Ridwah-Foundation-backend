@@ -57,6 +57,10 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    coverPhoto:{
+      type :String,
+      default:""
+    },
 
     bio: {
       type: String,
@@ -87,8 +91,6 @@ const userSchema = new mongoose.Schema(
 /**
  * Indexes for Query Performance
  */
-userSchema.index({ phone: 1 });
-userSchema.index({ email: 1 });
 userSchema.index({ role: 1 });
 
 /**
@@ -146,6 +148,7 @@ userSchema.methods.getPublicProfile = function () {
     email: this.email,
     role: this.role,
     profilePicture: this.profilePicture,
+    coverPhoto: this.coverPhoto,
     bio: this.bio,
     donationAmount: this.donationAmount,
     createdAt: this.createdAt,

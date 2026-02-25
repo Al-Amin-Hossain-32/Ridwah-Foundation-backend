@@ -1,8 +1,9 @@
-import postService from './post.service.js';
+import postService from "./post.service.js";
+import { getIO } from "../../config/socket.js";
 
 /**
  * Post Controller
- * 
+ *
  * Responsibility: HTTP layer only
  * - Validate request
  * - Call service
@@ -21,7 +22,7 @@ class PostController {
 
       res.status(201).json({
         success: true,
-        message: 'Post created successfully',
+        message: "Post created successfully",
         data: post,
       });
     } catch (error) {
@@ -81,7 +82,7 @@ class PostController {
       const result = await postService.getUserPosts(
         req.params.userId,
         page,
-        limit
+        limit,
       );
 
       res.status(200).json({
@@ -103,12 +104,12 @@ class PostController {
       const post = await postService.updatePost(
         req.params.id,
         req.user._id,
-        req.body
+        req.body,
       );
 
       res.status(200).json({
         success: true,
-        message: 'Post updated successfully',
+        message: "Post updated successfully",
         data: post,
       });
     } catch (error) {
@@ -123,15 +124,11 @@ class PostController {
    */
   async deletePost(req, res, next) {
     try {
-      await postService.deletePost(
-        req.params.id,
-        req.user._id,
-        req.user.role
-      );
+      await postService.deletePost(req.params.id, req.user._id, req.user.role);
 
       res.status(200).json({
         success: true,
-        message: 'Post deleted successfully',
+        message: "Post deleted successfully",
       });
     } catch (error) {
       next(error);
@@ -146,11 +143,38 @@ class PostController {
   async toggleLike(req, res, next) {
     try {
       const result = await postService.toggleLike(req.params.id, req.user._id);
+      const io = getIO();
+
+      io.emit("postLiked", {
+        postId: req.params.id,
+        likeCount: result.likeCount,
+      });
 
       res.status(200).json({
         success: true,
         message: `Post ${result.action}`,
         data: result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * @desc    Get global feed (All posts)
+   * @route   GET /api/posts/feed
+   * @access  Private
+   */
+  async getGlobalFeed(req, res, next) {
+    try {
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 20;
+
+      const result = await postService.getGlobalFeed(page, limit);
+
+      res.status(200).json({
+        success: true,
+        ...result,
       });
     } catch (error) {
       next(error);
@@ -169,12 +193,12 @@ class PostController {
       const result = await postService.addComment(
         req.params.id,
         req.user._id,
-        text
+        text,
       );
 
       res.status(201).json({
         success: true,
-        message: 'Comment added successfully',
+        message: "Comment added successfully",
         data: result,
       });
     } catch (error) {
@@ -192,12 +216,12 @@ class PostController {
       const post = await postService.deleteComment(
         req.params.id,
         req.params.commentId,
-        req.user._id
+        req.user._id,
       );
 
       res.status(200).json({
         success: true,
-        message: 'Comment deleted successfully',
+        message: "Comment deleted successfully",
         data: post,
       });
     } catch (error) {
