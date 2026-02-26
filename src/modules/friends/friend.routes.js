@@ -3,28 +3,22 @@ import friendController from './friend.controller.js';
 import { protect } from '../../middleware/auth.middleware.js';
 
 const router = express.Router();
+const c = friendController;
 
-/**
- * All routes require authentication
- */
+// সব route protected
+router.use(protect);
 
-// Get suggestions (before /:id routes)
-router.get('/suggestions', protect, friendController.getSuggestions.bind(friendController));
+// ⚠️ Specific paths MUST come before dynamic /:param paths
+router.get('/suggestions',      c.getSuggestions.bind(c));
+router.get('/requests',         c.getPendingRequests.bind(c));
+router.get('/status/:userId',   c.getStatus.bind(c));        // ← নতুন route
+// ⚠️ GET / এর আগে রাখতে হবে
+router.get('/status/:userId', protect, friendController.getStatus.bind(friendController));
+router.get('/',                 c.getFriends.bind(c));
 
-// Get pending requests
-router.get('/requests', protect, friendController.getPendingRequests.bind(friendController));
-
-// Get friends list
-router.get('/', protect, friendController.getFriends.bind(friendController));
-
-// Send friend request
-router.post('/request/:userId', protect, friendController.sendRequest.bind(friendController));
-
-// Accept/Reject request
-router.put('/accept/:id', protect, friendController.acceptRequest.bind(friendController));
-router.put('/reject/:id', protect, friendController.rejectRequest.bind(friendController));
-
-// Unfriend
-router.delete('/:friendId', protect, friendController.unfriend.bind(friendController));
+router.post('/request/:userId', c.sendRequest.bind(c));
+router.put('/accept/:id',       c.acceptRequest.bind(c));
+router.put('/reject/:id',       c.rejectRequest.bind(c));
+router.delete('/:friendId',     c.unfriend.bind(c));
 
 export default router;

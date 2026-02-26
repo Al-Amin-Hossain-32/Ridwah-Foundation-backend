@@ -1,4 +1,6 @@
 import authService from './auth.service.js';
+import postService from '../posts/post.service.js';
+import friendService from '../friends/friend.service.js';
 import { uploadToCloudinary } from '../../config/cloudinary.js';
 
 /**
@@ -138,6 +140,22 @@ async updateProfile(req, res, next) {
   }
 }
 
+async getUserPosts(req, res, next) {
+  try {
+    const page  = parseInt(req.query.page)  || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const result = await postService.getUserPosts(req.params.id, page, limit);
+    res.status(200).json({ success: true, data: result });
+  } catch (e) { next(e); }
+}
+
+async getUserFriends(req, res, next) {
+  try {
+    // friend.service থেকে getFriends ব্যবহার করুন
+    const friends = await friendService.getFriends(req.params.id);
+    res.status(200).json({ success: true, data: { friends, total: friends.length } });
+  } catch (e) { next(e); }
+}
 /**
  * @desc    Upload profile picture
  * @route   POST /api/users/upload-picture

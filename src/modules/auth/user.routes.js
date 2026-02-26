@@ -10,7 +10,11 @@ const router = express.Router();
  */
 // Get all users (for debugging) - Must be BEFORE /:id
 router.get('/', protect, authController.getAllUsers.bind(authController));
+// User-এর posts
+router.get('/:id/posts', protect, authController.getUserPosts.bind(authController));
 
+// User-এর friends  
+router.get('/:id/friends', protect, authController.getUserFriends.bind(authController));
 // Search users (must come before /:id to avoid conflict)
 router.get('/search', protect, authController.searchUsers.bind(authController));
 

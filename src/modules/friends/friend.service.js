@@ -1,246 +1,219 @@
 import Friendship from './friendship.model.js';
 import User from '../auth/user.model.js';
 
-/**
- * Friend Service Layer
- */
+/* ─────────────────────────── helpers ──────────────────────────── */
+
+const AppError = (message, statusCode = 400) => {
+  const err = new Error(message);
+  err.statusCode = statusCode;
+  return err;
+};
+
+const USER_FIELDS = 'name username profilePicture bio';
+
+/* ─────────────────────────── service ──────────────────────────── */
 
 class FriendService {
   /**
-   * Send friend request
-   * 
-   * @param {string} requesterId - Who is sending
-   * @param {string} recipientId - Who receives
-   * @returns {Promise<Object>}
+   * Send a friend request.
+   * Edge case: rejected → resend is allowed (resets to pending).
    */
   async sendFriendRequest(requesterId, recipientId) {
-    // Can't send request to yourself
-    if (requesterId === recipientId) {
-      const error = new Error('Cannot send friend request to yourself');
-      error.statusCode = 400;
-      throw error;
+    if (requesterId.toString() === recipientId.toString()) {
+      throw AppError('নিজেকে ফ্রেন্ড রিকোয়েস্ট পাঠানো যাবে না');
     }
 
-    // Check if recipient exists
-    const recipient = await User.findById(recipientId);
-    if (!recipient) {
-      const error = new Error('User not found');
-      error.statusCode = 404;
-      throw error;
-    }
+    const recipient = await User.findById(recipientId).lean();
+    if (!recipient) throw AppError('ইউজার পাওয়া যায়নি', 404);
 
-    // Check if friendship already exists
-    const existingFriendship = await Friendship.findOne({
+    const existing = await Friendship.findOne({
       $or: [
         { requester: requesterId, recipient: recipientId },
         { requester: recipientId, recipient: requesterId },
       ],
     });
 
-    if (existingFriendship) {
-      if (existingFriendship.status === 'accepted') {
-        const error = new Error('You are already friends');
-        error.statusCode = 400;
-        throw error;
-      }
-      if (existingFriendship.status === 'pending') {
-        const error = new Error('Friend request already sent');
-        error.statusCode = 400;
-        throw error;
+    if (existing) {
+      if (existing.status === 'accepted') throw AppError('আপনারা ইতিমধ্যে বন্ধু');
+      if (existing.status === 'pending') throw AppError('রিকোয়েস্ট ইতিমধ্যে পাঠানো আছে');
+
+      // rejected → allow resend
+      if (existing.status === 'rejected') {
+        existing.status = 'pending';
+        existing.requester = requesterId;
+        existing.recipient = recipientId;
+        await existing.save();
+        return existing.populate([
+          { path: 'requester', select: USER_FIELDS },
+          { path: 'recipient', select: USER_FIELDS },
+        ]);
       }
     }
 
-    // Create friendship request
     const friendship = await Friendship.create({
       requester: requesterId,
       recipient: recipientId,
-      status: 'pending',
     });
 
-    await friendship.populate('requester', 'name profilePicture');
-    await friendship.populate('recipient', 'name profilePicture');
-
-    return friendship;
+    return friendship.populate([
+      { path: 'requester', select: USER_FIELDS },
+      { path: 'recipient', select: USER_FIELDS },
+    ]);
   }
 
   /**
-   * Get pending friend requests
-   * 
-   * @param {string} userId
-   * @returns {Promise<Array>}
+   * Get friendship status between currentUser and targetUser.
+   * Returns: { status, direction?, friendshipId? }
+   *   status    → 'none' | 'pending' | 'accepted' | 'rejected' | 'self'
+   *   direction → 'sent' | 'received'   (only when status !== 'none' | 'self')
+   */
+  async getFriendshipStatus(currentUserId, targetUserId) {
+    if (currentUserId.toString() === targetUserId.toString()) {
+      return { status: 'self' };
+    }
+
+    const friendship = await Friendship.findOne({
+      $or: [
+        { requester: currentUserId, recipient: targetUserId },
+        { requester: targetUserId, recipient: currentUserId },
+      ],
+    }).lean();
+
+    if (!friendship) return { status: 'none' };
+
+    const direction =
+      friendship.requester.toString() === currentUserId.toString() ? 'sent' : 'received';
+
+    return {
+      status: friendship.status,
+      direction,
+      friendshipId: friendship._id,
+    };
+  }
+
+  /**
+   * Pending requests sent TO the current user.
+   * Returns flat user objects (requestId merged) → cleaner for frontend.
    */
   async getPendingRequests(userId) {
     const requests = await Friendship.find({
       recipient: userId,
       status: 'pending',
     })
-      .populate('requester', 'name profilePicture bio')
-      .sort({ createdAt: -1 });
+      .populate('requester', USER_FIELDS)
+      .sort({ createdAt: -1 })
+      .lean();
 
-    return requests;
+    return requests.map(({ _id, requester }) => ({
+      ...requester,
+      requestId: _id, // friendship _id — accept/reject-এ ব্যবহার হবে
+    }));
   }
 
   /**
-   * Accept friend request
-   * 
-   * @param {string} friendshipId
-   * @param {string} userId - Must be recipient
-   * @returns {Promise<Object>}
+   * Accept a pending request (only recipient).
    */
   async acceptFriendRequest(friendshipId, userId) {
     const friendship = await Friendship.findById(friendshipId);
+    if (!friendship) throw AppError('রিকোয়েস্ট পাওয়া যায়নি', 404);
 
-    if (!friendship) {
-      const error = new Error('Friend request not found');
-      error.statusCode = 404;
-      throw error;
-    }
-
-    // Only recipient can accept
     if (friendship.recipient.toString() !== userId.toString()) {
-      const error = new Error('You cannot accept this request');
-      error.statusCode = 403;
-      throw error;
+      throw AppError('অনুমতি নেই', 403);
     }
-
-    // Already accepted
-    if (friendship.status === 'accepted') {
-      const error = new Error('Friend request already accepted');
-      error.statusCode = 400;
-      throw error;
-    }
+    if (friendship.status === 'accepted') throw AppError('ইতিমধ্যে অ্যাক্সেপ্ট হয়েছে');
 
     friendship.status = 'accepted';
     await friendship.save();
-
-    await friendship.populate('requester', 'name profilePicture');
-    await friendship.populate('recipient', 'name profilePicture');
-
     return friendship;
   }
 
   /**
-   * Reject friend request
-   * 
-   * @param {string} friendshipId
-   * @param {string} userId
-   * @returns {Promise<void>}
+   * Reject a pending request (only recipient).
    */
   async rejectFriendRequest(friendshipId, userId) {
     const friendship = await Friendship.findById(friendshipId);
+    if (!friendship) throw AppError('রিকোয়েস্ট পাওয়া যায়নি', 404);
 
-    if (!friendship) {
-      const error = new Error('Friend request not found');
-      error.statusCode = 404;
-      throw error;
-    }
-
-    // Only recipient can reject
-    if (friendship.recipient.toString() !== userId) {
-      const error = new Error('You cannot reject this request');
-      error.statusCode = 403;
-      throw error;
+    if (friendship.recipient.toString() !== userId.toString()) {
+      throw AppError('অনুমতি নেই', 403);
     }
 
     friendship.status = 'rejected';
     await friendship.save();
   }
 
- /**
- * Get all friends
- * 
- * @param {string} userId
- * @returns {Promise<Array>}
- */
-async getFriends(userId) {
-  const userIdString = userId.toString();
-  
+  /**
+   * Get all accepted friends — returns the OTHER user's data.
+   */
+  async getFriends(userId) {
+    const userIdStr = userId.toString();
 
-  const friendships = await Friendship.find({
-    $or: [
-      { requester: userId, status: 'accepted' },
-      { recipient: userId, status: 'accepted' },
-    ],
-  })
-    .populate('requester', 'name profilePicture bio')
-    .populate('recipient', 'name profilePicture bio')
-    .sort({ updatedAt: -1 });
+    const friendships = await Friendship.find({
+      status: 'accepted',
+      $or: [{ requester: userId }, { recipient: userId }],
+    })
+      .populate('requester', USER_FIELDS)
+      .populate('recipient', USER_FIELDS)
+      .sort({ updatedAt: -1 })
+      .lean();
 
-
-  // Extract friend data (the OTHER user, not self)
-  const friends = friendships.map((friendship) => {
-    // Debug log
-    const requesterId = friendship.requester._id.toString();
-    const recipientId = friendship.recipient._id.toString();
-
-    // If current user is requester, return recipient
-    // If current user is recipient, return requester
-    if (requesterId === userIdString) {
-      console.log('   → Returning recipient:', friendship.recipient.name);
-      return friendship.recipient;
-    } else {
-      console.log('   → Returning requester:', friendship.requester.name);
-      return friendship.requester;
-    }
-  });
-
-
-
-  return friends;
-}
+    return friendships.map((f) =>
+      f.requester._id.toString() === userIdStr ? f.recipient : f.requester
+    )
+      .filter(Boolean);
+  }
 
   /**
-   * Unfriend
-   * 
-   * @param {string} userId
-   * @param {string} friendId
-   * @returns {Promise<void>}
+   * Remove an accepted friendship.
    */
   async unfriend(userId, friendId) {
-    const friendship = await Friendship.findOne({
+    const deleted = await Friendship.findOneAndDelete({
+      status: 'accepted',
       $or: [
         { requester: userId, recipient: friendId },
         { requester: friendId, recipient: userId },
       ],
-      status: 'accepted',
     });
-
-    if (!friendship) {
-      const error = new Error('Friendship not found');
-      error.statusCode = 404;
-      throw error;
-    }
-
-    await friendship.deleteOne();
+    if (!deleted) throw AppError('বন্ধুত্ব পাওয়া যায়নি', 404);
   }
+async getFriendshipStatus(currentUserId, targetUserId) {
+  if (currentUserId.toString() === targetUserId.toString()) {
+    return { status: 'self' };
+  }
+  const friendship = await Friendship.findOne({
+    $or: [
+      { requester: currentUserId, recipient: targetUserId },
+      { requester: targetUserId, recipient: currentUserId },
+    ],
+  }).lean();
+
+  if (!friendship) return { status: 'none' };
+
+  const direction =
+    friendship.requester.toString() === currentUserId.toString() ? 'sent' : 'received';
+
+  return { status: friendship.status, direction, friendshipId: friendship._id };
+}
+
 
   /**
-   * Get friend suggestions (users not yet friends)
-   * 
-   * @param {string} userId
-   * @returns {Promise<Array>}
+   * Users with no existing friendship connection (suggestions).
    */
   async getSuggestions(userId) {
-    // Get existing friendships
     const friendships = await Friendship.find({
       $or: [{ requester: userId }, { recipient: userId }],
-    });
+    }).lean();
 
-    // Extract user IDs to exclude
-    const excludeIds = friendships.map((f) =>
-      f.requester.toString() === userId ? f.recipient : f.requester
-    );
-    excludeIds.push(userId); // Exclude self
+    const excludeIds = new Set([userId.toString()]);
+    for (const f of friendships) {
+      excludeIds.add(f.requester.toString());
+      excludeIds.add(f.recipient.toString());
+    }
 
-    // Find users not in exclude list
-    const suggestions = await User.find({
-      _id: { $nin: excludeIds },
-      isActive: true,
-    })
-      .select('name profilePicture bio')
-      .limit(10);
-
-    return suggestions;
+    return User.find({ _id: { $nin: [...excludeIds] }, isActive: true })
+      .select(USER_FIELDS)
+      .limit(10)
+      .lean();
   }
 }
 

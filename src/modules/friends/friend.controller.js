@@ -1,142 +1,77 @@
 import friendService from './friend.service.js';
 
 class FriendController {
-  /**
-   * @desc    Send friend request
-   * @route   POST /api/friends/request/:userId
-   * @access  Private
-   */
+  /** POST /api/friends/request/:userId */
   async sendRequest(req, res, next) {
     try {
-      const friendship = await friendService.sendFriendRequest(
-        req.user._id,
-        req.params.userId
-      );
-
-      res.status(201).json({
-        success: true,
-        message: 'Friend request sent',
-        data: friendship,
-      });
-    } catch (error) {
-      next(error);
-    }
+      const data = await friendService.sendFriendRequest(req.user._id, req.params.userId);
+      res.status(201).json({ success: true, message: 'ফ্রেন্ড রিকোয়েস্ট পাঠানো হয়েছে', data });
+    } catch (e) { next(e); }
   }
 
-  /**
-   * @desc    Get pending requests
-   * @route   GET /api/friends/requests
-   * @access  Private
-   */
+  /** GET /api/friends/status/:userId */
+  async getStatus(req, res, next) {
+    try {
+      const data = await friendService.getFriendshipStatus(req.user._id, req.params.userId);
+      res.status(200).json({ success: true, data });
+    } catch (e) { next(e); }
+  }
+
+  /** GET /api/friends/requests */
   async getPendingRequests(req, res, next) {
     try {
-      const requests = await friendService.getPendingRequests(req.user._id);
-
-      res.status(200).json({
-        success: true,
-        count: requests.length,
-        data: requests,
-      });
-    } catch (error) {
-      next(error);
-    }
+      const data = await friendService.getPendingRequests(req.user._id);
+      res.status(200).json({ success: true, count: data.length, data });
+    } catch (e) { next(e); }
   }
 
-  /**
-   * @desc    Accept friend request
-   * @route   PUT /api/friends/accept/:id
-   * @access  Private
-   */
+  /** PUT /api/friends/accept/:id */
   async acceptRequest(req, res, next) {
     try {
-      const friendship = await friendService.acceptFriendRequest(
-        req.params.id,
-        req.user._id
-      );
-
-      res.status(200).json({
-        success: true,
-        message: 'Friend request accepted',
-        data: friendship,
-      });
-    } catch (error) {
-      next(error);
-    }
+      const data = await friendService.acceptFriendRequest(req.params.id, req.user._id);
+      res.status(200).json({ success: true, message: 'রিকোয়েস্ট অ্যাক্সেপ্ট হয়েছে', data });
+    } catch (e) { next(e); }
   }
 
-  /**
-   * @desc    Reject friend request
-   * @route   PUT /api/friends/reject/:id
-   * @access  Private
-   */
+  /** PUT /api/friends/reject/:id */
   async rejectRequest(req, res, next) {
     try {
       await friendService.rejectFriendRequest(req.params.id, req.user._id);
-
-      res.status(200).json({
-        success: true,
-        message: 'Friend request rejected',
-      });
-    } catch (error) {
-      next(error);
-    }
+      res.status(200).json({ success: true, message: 'রিকোয়েস্ট রিজেক্ট হয়েছে' });
+    } catch (e) { next(e); }
   }
 
-  /**
-   * @desc    Get friends list
-   * @route   GET /api/friends
-   * @access  Private
-   */
+
+  /** GET /api/friends */
   async getFriends(req, res, next) {
     try {
-      const friends = await friendService.getFriends(req.user._id);
-
-      res.status(200).json({
-        success: true,
-        count: friends.length,
-        data: friends,
-      });
-    } catch (error) {
-      next(error);
-    }
+      const data = await friendService.getFriends(req.user._id);
+      res.status(200).json({ success: true, count: data.length, data });
+    } catch (e) { next(e); }
   }
 
-  /**
-   * @desc    Unfriend
-   * @route   DELETE /api/friends/:friendId
-   * @access  Private
-   */
+  /** DELETE /api/friends/:friendId */
   async unfriend(req, res, next) {
     try {
       await friendService.unfriend(req.user._id, req.params.friendId);
-
-      res.status(200).json({
-        success: true,
-        message: 'Unfriended successfully',
-      });
-    } catch (error) {
-      next(error);
-    }
+      res.status(200).json({ success: true, message: 'বন্ধু সরানো হয়েছে' });
+    } catch (e) { next(e); }
   }
+  async getStatus(req, res, next) {
+  try {
+    const data = await friendService.getFriendshipStatus(req.user._id, req.params.userId);
+    res.status(200).json({ success: true, data });
+  } catch (e) { next(e); }
+}
 
-  /**
-   * @desc    Get friend suggestions
-   * @route   GET /api/friends/suggestions
-   * @access  Private
-   */
+  /** GET /api/friends/suggestions */
   async getSuggestions(req, res, next) {
     try {
-      const suggestions = await friendService.getSuggestions(req.user._id);
-
-      res.status(200).json({
-        success: true,
-        count: suggestions.length,
-        data: suggestions,
-      });
-    } catch (error) {
-      next(error);
-    }
+      const data = await friendService.getSuggestions(req.user._id);
+      res.status(200).json({ success: true, count: data.length, data });
+    } catch (e) { next(e); }
   }
 }
+
 
 export default new FriendController();
