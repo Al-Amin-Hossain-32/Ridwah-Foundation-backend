@@ -18,7 +18,7 @@ router.get(
 );
 
 // PUT  /api/notifications/read-all → সব নোটিফিকেশন পড়া হয়েছে mark করা
-// NOTE: এই route টি /:id এর আগে রাখতে হবে, না হলে 'read-all' কে id হিসেবে ধরবে
+
 router.put(
   '/read-all',
   protect,
