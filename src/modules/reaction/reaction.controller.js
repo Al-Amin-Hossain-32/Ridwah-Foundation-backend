@@ -70,15 +70,3 @@ console.log('Reactors:', res.data);
 
 export default new ReactionController();
 
-// ─── reaction.routes.js ───────────────────────────────────────────────────────
-// import express from 'express';
-// import reactionController from './reaction.controller.js';
-// import { protect } from '../../middleware/auth.middleware.js';
-//
-// const router = express.Router();
-//
-// router.post('/:targetType/:targetId', protect, reactionController.toggleReaction.bind(reactionController));
-// router.get('/:targetType/:targetId', protect, reactionController.getReactions.bind(reactionController));
-// router.get('/:targetType/:targetId/reactors', protect, reactionController.getReactors.bind(reactionController));
-//
-// export default router;
