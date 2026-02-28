@@ -5,14 +5,13 @@ import { protect } from '../../middleware/auth.middleware.js';
 const router = express.Router();
 
 /**
- * All routes require authentication
+ * Post Routes (Updated)
+ * New endpoints: replies, notification management
  */
-// Global Feed (সবার পোস্ট)
-router.get('/feed', protect, postController.getGlobalFeed.bind(postController));
-// Timeline (must be before /:id)
-router.get('/timeline', protect, postController.getTimeline.bind(postController));
 
-// User posts (must be before /:id)
+// Feed
+router.get('/feed', protect, postController.getGlobalFeed.bind(postController));
+router.get('/timeline', protect, postController.getTimeline.bind(postController));
 router.get('/user/:userId', protect, postController.getUserPosts.bind(postController));
 
 // Post CRUD
@@ -21,15 +20,18 @@ router.get('/:id', protect, postController.getPost.bind(postController));
 router.put('/:id', protect, postController.updatePost.bind(postController));
 router.delete('/:id', protect, postController.deletePost.bind(postController));
 
-// Like
-router.post('/:id/like', protect, postController.toggleLike.bind(postController));
-
 // Comments
 router.post('/:id/comment', protect, postController.addComment.bind(postController));
-router.delete(
-  '/:id/comment/:commentId',
-  protect,
-  postController.deleteComment.bind(postController)
-);
+router.delete('/:id/comment/:commentId', protect, postController.deleteComment.bind(postController));
+
+// Replies (NEW)
+router.post('/:id/comment/:commentId/reply', protect, postController.addReply.bind(postController));
+router.delete('/:id/comment/:commentId/reply/:replyId', protect, postController.deleteReply.bind(postController));
 
 export default router;
+
+// ─── notification.routes.js ───────────────────────────────────────────────────
+// GET  /api/notifications          → get all (paginated)
+// PUT  /api/notifications/:id/read → mark one as read
+// PUT  /api/notifications/read-all → mark all as read
+// DELETE /api/notifications/:id   → delete one

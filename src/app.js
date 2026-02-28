@@ -18,12 +18,16 @@ import campaignRoutes from "./modules/donations/campaign.routes.js";
 import donationRoutes from "./modules/donations/donation.routes.js";
 import recurringDonationRoutes from "./modules/donations/recurringDonation.routes.js";
 
+import reactionRoutes from './modules/reaction/reaction.routes.js';
+import notificationRoutes from './modules/notification/notification.routes.js';
+
+
 // Initialize Express app
 const app = express();
 
 /**
  * Global Middleware
- */
+*/
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -42,7 +46,7 @@ if (config.nodeEnv === 'development') {
 
 /**
  * Routes
- */
+*/
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/posts', postRoutes);
@@ -53,6 +57,8 @@ app.use("/api/book-requests", bookRequestRoutes);
 app.use("/api/campaigns", campaignRoutes);
 app.use("/api/donations", donationRoutes);
 app.use("/api/recurring-donations", recurringDonationRoutes);
+app.use('/api/reactions', reactionRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 
 // Health check
