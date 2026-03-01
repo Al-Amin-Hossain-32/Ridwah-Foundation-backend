@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 
 /**
  * Updated Post Schema
@@ -14,14 +14,14 @@ const replySchema = new mongoose.Schema(
   {
     user: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      ref: "User",
       required: true,
     },
     text: {
       type: String,
       required: true,
       trim: true,
-      maxlength: [500, 'Reply cannot exceed 500 characters'],
+      maxlength: [500, "Reply cannot exceed 500 characters"],
     },
     // Cached reaction counts for performance
     reactionCounts: {
@@ -36,7 +36,7 @@ const replySchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 // Comment sub-schema
@@ -44,14 +44,14 @@ const commentSchema = new mongoose.Schema(
   {
     user: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      ref: "User",
       required: true,
     },
     text: {
       type: String,
       required: true,
       trim: true,
-      maxlength: [1000, 'Comment cannot exceed 1000 characters'],
+      maxlength: [1000, "Comment cannot exceed 1000 characters"],
     },
     // Nested replies (Facebook allows 1 level)
     replies: [replySchema],
@@ -68,14 +68,14 @@ const commentSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 const postSchema = new mongoose.Schema(
   {
     author: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      ref: "User",
       required: true,
       index: true,
     },
@@ -84,14 +84,14 @@ const postSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
-      maxlength: [5000, 'Post content cannot exceed 5000 characters'],
+      maxlength: [5000, "Post content cannot exceed 5000 characters"],
     },
 
     images: {
       type: [String],
       validate: {
         validator: (images) => images.length <= 5,
-        message: 'Cannot upload more than 5 images',
+        message: "Cannot upload more than 5 images",
       },
       default: [],
     },
@@ -113,21 +113,24 @@ const postSchema = new mongoose.Schema(
       default: 0,
       index: true,
     },
+    viewCount: { type: Number, default: 0 },
+    viewedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
   },
+
   {
     timestamps: true,
-  }
+  },
 );
 
 postSchema.index({ author: 1, createdAt: -1 });
 postSchema.index({ createdAt: -1 });
 
-postSchema.virtual('commentCount').get(function () {
-  return this.comments.length;
+postSchema.virtual("commentCount").get(function () {
+  return this.comments?.length || 0;
 });
 
-postSchema.set('toJSON', { virtuals: true });
-postSchema.set('toObject', { virtuals: true });
+postSchema.set("toJSON", { virtuals: true });
+postSchema.set("toObject", { virtuals: true });
 
-const Post = mongoose.model('Post', postSchema);
+const Post = mongoose.model("Post", postSchema);
 export default Post;

@@ -106,7 +106,38 @@ class PostService {
     }
     return post;
   }
+ // ─── View Count ───────────────────────────────────────────────────────────────
 
+  /**
+   * View count বাড়ানো
+   * - একই user একই post বারবার view করলে count বাড়বে না (Set দিয়ে track)
+   * - Anonymous view-ও count হবে (userId null হলে)
+   * - Realtime socket emit করবে
+   */
+  async incrementView(postId, userId) {
+    const post = await Post.findById(postId).select('viewCount viewedBy author');
+    if (!post) return null;
+
+    // নিজের post view করলে count হবে না
+    if (userId && post.author.toString() === userId.toString()) return null;
+
+    // Already viewed check (logged in user)
+    if (userId) {
+      const alreadyViewed = post.viewedBy?.some((id) => id.toString() === userId.toString());
+      if (alreadyViewed) return null;
+      post.viewedBy.push(userId);
+    }
+
+    post.viewCount = (post.viewCount || 0) + 1;
+    await post.save();
+
+    // Realtime — সবাইকে নতুন view count জানাও
+    try {
+      getIO().emit('postViewUpdated', { postId, viewCount: post.viewCount });
+    } catch (_) {}
+
+    return post.viewCount;
+  }
   async getUserPosts(userId, page = 1, limit = 20) {
     const [posts, total] = await Promise.all([
       this._defaultPopulate(

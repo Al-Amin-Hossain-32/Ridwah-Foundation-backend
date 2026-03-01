@@ -19,6 +19,7 @@ router.post('/', protect, postController.createPost.bind(postController));
 router.get('/:id', protect, postController.getPost.bind(postController));
 router.put('/:id', protect, postController.updatePost.bind(postController));
 router.delete('/:id', protect, postController.deletePost.bind(postController));
+router.post('/:id/view', protect, postController.incrementView);
 
 // Comments
 router.post('/:id/comment', protect, postController.addComment.bind(postController));

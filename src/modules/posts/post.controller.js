@@ -208,6 +208,13 @@ class PostController {
       next(error);
     }
   }
+
+ async incrementView (req, res, next) {
+  try {
+    const viewCount = await postService.incrementView(req.params.id, req.user?._id);
+    res.status(200).json({ success: true, data: { viewCount } });
+  } catch (err) { next(err); }
+};
 }
 
 export default new PostController();
