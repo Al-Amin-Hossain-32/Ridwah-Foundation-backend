@@ -1,6 +1,7 @@
 import {cloudinary} from "../../config/cloudinary.js";
 import Campaign from "./campaign.model.js";
 import Donation from "./donation.model.js";
+import { getIO } from "../../config/socket.js";
 
 // ─── Helper: Cloudinary Upload ────────────────────────────────────────────────
 const uploadToCloudinary = (buffer, options) => {
@@ -13,29 +14,34 @@ const uploadToCloudinary = (buffer, options) => {
   });
 };
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// CAMPAIGN CRUD
-// ═══════════════════════════════════════════════════════════════════════════════
+// ─── Helper: emit safely ─────────────────────────────────────────────────────
+const emit = (event, data) => {
+  try { getIO().emit(event, data); } catch { /* ignore */ }
+};
 
-// ─── Create Campaign ──────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// CREATE CAMPAIGN
+// ═══════════════════════════════════════════════════════════════════════════════
 export const createCampaign = async (campaignData, managerId) => {
-  const { title, description, goalAmount, startDate, endDate, status } =
-    campaignData;
+  const { title, description, goalAmount, startDate, endDate, status } = campaignData;
 
   const campaign = await Campaign.create({
-    title,
-    description,
-    goalAmount,
-    startDate,
-    endDate,
+    title, description, goalAmount, startDate, endDate,
     status: status || "draft",
     createdBy: managerId,
   });
 
+  await campaign.populate("createdBy", "name email");
+
+  // ── Socket: সবার campaign list-এ দেখাবে ─────────────────────────────────
+  emit("campaignCreated", campaign.toObject({ virtuals: true }));
+
   return campaign;
 };
 
-// ─── Get All Campaigns ────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// GET ALL CAMPAIGNS
+// ═══════════════════════════════════════════════════════════════════════════════
 export const getAllCampaigns = async (query) => {
   const { status, isActive, sortBy = "newest", page = 1, limit = 10 } = query;
 
@@ -44,13 +50,12 @@ export const getAllCampaigns = async (query) => {
   if (isActive !== undefined) filter.isActive = isActive === "true";
 
   const sortOptions = {
-    newest: { createdAt: -1 },
-    oldest: { createdAt: 1 },
+    newest:   { createdAt: -1 },
+    oldest:   { createdAt: 1 },
     progress: { currentAmount: -1 },
     deadline: { endDate: 1 },
   };
   const sort = sortOptions[sortBy] || sortOptions.newest;
-
   const skip = (parseInt(page) - 1) * parseInt(limit);
 
   const [campaigns, total] = await Promise.all([
@@ -74,7 +79,9 @@ export const getAllCampaigns = async (query) => {
   };
 };
 
-// ─── Get Campaign By ID ───────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// GET CAMPAIGN BY ID
+// ═══════════════════════════════════════════════════════════════════════════════
 export const getCampaignById = async (campaignId) => {
   const campaign = await Campaign.findById(campaignId)
     .populate("createdBy", "name email")
@@ -86,7 +93,6 @@ export const getCampaignById = async (campaignId) => {
     throw err;
   }
 
-  // Get recent donations for this campaign
   const recentDonations = await Donation.find({
     campaign: campaignId,
     status: "completed",
@@ -100,7 +106,9 @@ export const getCampaignById = async (campaignId) => {
   return { campaign, recentDonations };
 };
 
-// ─── Update Campaign ──────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// UPDATE CAMPAIGN
+// ═══════════════════════════════════════════════════════════════════════════════
 export const updateCampaign = async (campaignId, updateData) => {
   const campaign = await Campaign.findById(campaignId);
   if (!campaign) {
@@ -109,27 +117,23 @@ export const updateCampaign = async (campaignId, updateData) => {
     throw err;
   }
 
-  const allowedFields = [
-    "title",
-    "description",
-    "goalAmount",
-    "startDate",
-    "endDate",
-    "status",
-    "isActive",
-  ];
-
+  const allowedFields = ["title","description","goalAmount","startDate","endDate","status","isActive"];
   allowedFields.forEach((field) => {
-    if (updateData[field] !== undefined) {
-      campaign[field] = updateData[field];
-    }
+    if (updateData[field] !== undefined) campaign[field] = updateData[field];
   });
 
   await campaign.save();
+  await campaign.populate("createdBy", "name email");
+
+  // ── Socket: সবার campaign list/detail update ──────────────────────────────
+  emit("campaignUpdated", campaign.toObject({ virtuals: true }));
+
   return campaign;
 };
 
-// ─── Delete Campaign ──────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// DELETE CAMPAIGN
+// ═══════════════════════════════════════════════════════════════════════════════
 export const deleteCampaign = async (campaignId) => {
   const campaign = await Campaign.findById(campaignId);
   if (!campaign) {
@@ -138,30 +142,32 @@ export const deleteCampaign = async (campaignId) => {
     throw err;
   }
 
-  // Check if campaign has donations
   const donationCount = await Donation.countDocuments({
     campaign: campaignId,
     status: "completed",
   });
 
   if (donationCount > 0) {
-    const err = new Error(
-      "Cannot delete campaign with existing donations. Deactivate it instead."
-    );
+    const err = new Error("Cannot delete campaign with existing donations. Deactivate it instead.");
     err.statusCode = 400;
     throw err;
   }
 
-  // Delete cover image
   if (campaign.coverImage?.publicId) {
     await cloudinary.uploader.destroy(campaign.coverImage.publicId);
   }
 
   await campaign.deleteOne();
+
+  // ── Socket: সবার list থেকে campaign সরে যাবে ────────────────────────────
+  emit("campaignDeleted", { campaignId });
+
   return { message: "Campaign deleted successfully" };
 };
 
-// ─── Upload Cover Image ───────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// UPLOAD COVER IMAGE
+// ═══════════════════════════════════════════════════════════════════════════════
 export const uploadCoverImage = async (campaignId, fileBuffer) => {
   const campaign = await Campaign.findById(campaignId);
   if (!campaign) {
@@ -170,7 +176,6 @@ export const uploadCoverImage = async (campaignId, fileBuffer) => {
     throw err;
   }
 
-  // Delete old cover
   if (campaign.coverImage?.publicId) {
     await cloudinary.uploader.destroy(campaign.coverImage.publicId);
   }
@@ -178,27 +183,27 @@ export const uploadCoverImage = async (campaignId, fileBuffer) => {
   const result = await uploadToCloudinary(fileBuffer, {
     folder: "foundation/campaigns",
     resource_type: "image",
-    transformation: [
-      { width: 800, height: 450, crop: "fill", quality: "auto" },
-    ],
+    transformation: [{ width: 800, height: 450, crop: "fill", quality: "auto" }],
   });
 
-  campaign.coverImage = {
-    url: result.secure_url,
-    publicId: result.public_id,
-  };
-
+  campaign.coverImage = { url: result.secure_url, publicId: result.public_id };
   await campaign.save();
+
+  // Socket: cover image update
+  emit("campaignUpdated", campaign.toObject({ virtuals: true }));
+
   return campaign;
 };
 
-// ─── Update Campaign Progress (called after donation approval) ────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// UPDATE CAMPAIGN PROGRESS (donation approve-এর পরে call হয়)
+// ═══════════════════════════════════════════════════════════════════════════════
 export const updateCampaignProgress = async (campaignId, amount) => {
   const campaign = await Campaign.findById(campaignId);
-  if (!campaign) return;
+  if (!campaign) return null;
 
   campaign.currentAmount += amount;
-  await campaign.save(); // pre-save will auto-update status if goal reached
+  await campaign.save(); // pre-save auto-updates status if goal reached
 
   return campaign;
 };
